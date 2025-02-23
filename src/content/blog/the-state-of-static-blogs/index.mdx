@@ -2,183 +2,243 @@
 title: 'The State of Static Blogs in 2024'
 description: 'There should not be a single reason why you would need a command palette search bar to find a blog post on your own site.'
 date: 2024-07-25
-tags: ['webdev', 'opinion']
+tags: ['robotics', 'engineering', 'kinematics']
 image: './1200x630.png'
 authors: ['Shourya']
-draft: true
 ---
 
-## Introduction
+<STLViewer client:only="react" />
 
-Hello! My name is enscribe ([jktrn](https://github.com/jktrn) on GitHub), and I'm a fullstack web developer who has been fiddling with blogging platforms for a couple of years now. I run a blog at [enscribe.dev](https://enscribe.dev), where I write about cybersecurity and the capture-the-flag (CTF) scene.
+# **Robotic Arm: Assembly, Kinematics, and Control**
 
-I have a lot of opinions about what makes a great blogging template. As a cumulative result of all the slop, bullshit, and outright terrible design decisions I've had to deal with working with various templates and frameworks, I bring you [astro-erudite](https://github.com/jktrn/astro-erudite), which should hopefully bring a better developer and user experience in terms of ease of use, customization, and performance.
+## **1. Introduction**
+A robotic arm is a **multi-degree-of-freedom (DOF) mechanical system**, capable of performing precise movements in various industrial and research applications. 
 
-astro-erudite is written in Astro, a framework hyperoptimized for static content such as blogs. Aesthetically, it is also designed to be as boring as possible while still maintaining maximum functionality, as to allow for the freedom of the developer (or the designer they hire) to make their blog uniquely their own. Within the codebase of this template I've included many nuances that, in my opinion (and there will be many, many opinions here), make the developer experience significantly more pleasant. I've also _excluded_ many features that, frankly, you don't need.
+In this article, we explore the **design, kinematics, and control mechanisms** for a **5-DOF robotic arm**, covering:
+- **Degrees of Freedom (DOF)** and how they impact motion
+- **Forward & Inverse Kinematics** calculations
+- **Control mechanisms (Open-loop & Closed-loop)**
 
-## Welcoming some DX features
+---
 
-This is a non-exhaustive list of features I believe are essential for a frictionless developer experience:
+## **2. Understanding Degrees of Freedom (DOF)**
+A robotic arm's **DOF** defines how many independent movements it can perform. Each joint adds **one rotational or translational movement**.
 
-- [shadcn/ui](https://ui.shadcn.com) is a pretty controversial component library. I love it. I don't care much for the components themselves as they are literally [Radix](https://www.radix-ui.com/) primitive wrappers&mdash;however, the best part is arguably its take on [theming](https://ui.shadcn.com/docs/theming), which introduces a convention involving CSS colors such as `background` and `foreground` into your Tailwind configuration so that styling is a breeze. These classes also automatically adapt to the user's selected theme, and as such you don't need to worry about adding an equivalent `dark:` style to all of your theming. shadcn/ui turns `"bg-stone-50 text-stone-900 dark:bg-stone-900 dark:text-stone-50"` into `"bg-background text-foreground"`, both more semantic and easier to blanket edit (if you wanted to change all your blues in your site to indigos, you would need to go around every single class and change it rather than editing a single CSS variable). Other utility colors such as `secondary`, `muted`, `accent`, and `destructive` also exist and are very self-explanatory in name (and also have an equivalent `-foreground` class, e.g. `secondary-foreground`, which you can apply to text on top of these colors).
-- [Tailwind Typography](https://github.com/tailwindlabs/tailwindcss-typography) is a plugin that automatically styles any content surrounded by an `<article>{:html}` tag in a way which makes it readable and blog-post-friendly. It does this via a `prose` class which you can wrap anything with to style the interior content. This is especially useful for HTML you don't control, e.g. a post rendered from Markdown. Although your control over the rendering is a bit less fine-grained, you're also already using Tailwind so this right has long been forsaken.
-- [Shiki](https://github.com/shikijs/shiki) is a syntax highlighter for code blocks. Although Astro code blocks utilize Shiki under the hood, I've actually disabled the default code blocks in this template so that they don't collide with my preferred library [rehype-pretty-code](https://rehype-pretty.pages.dev), which is _also_ powered by Shiki but allows for line numbers, line highlighting, inline code syntax highlighting, and a transformers API for advanced customization such as manual `diff` visualization and line blurring. This library does not ship with any CSS, and it's up to you to style the code blocks and code block titles as you see fit. I've provided styles in `src/styles/global.css` within the `@layer components{:css}` directive if you wish to fiddle with them. The following code block is an example of how to style code blocks using rehype-pretty-code, and was generated with the following Markdown code:
+To understand DOF, let's compare with the **human arm**:
+1. **Shoulder (3 DOF):** Moves in pitch (up/down), yaw (left/right), and roll (twisting).
+2. **Elbow (1 DOF):** Bends the arm (pitch movement).
+3. **Wrist (2 DOF):** Moves up/down (pitch) and rotates (roll).
+4. **Fingers (Multiple DOF):** Used for gripping objects.
 
-  ````mdx
-  ```css title="src/styles/global.css" caption="Styling code blocks using rehype-pretty-code (with a caption down here)" showLineNumbers{80} {10-12} /apply/ /components/
+For our **5-DOF robotic arm**, the movement is as follows:
 
-  ```
-  ````
+| Joint     | Function              | Motion Type       | Motor Type       |
+|-----------|----------------------|------------------|------------------|
+| Base      | Rotation (Yaw)       | Rotational       | Stepper Motor   |
+| Shoulder  | Up/Down (Pitch)      | Rotational       | Servo / Stepper |
+| Elbow     | Bending (Pitch)      | Rotational       | Servo / Stepper |
+| Wrist     | Rotation (Roll)      | Rotational       | Servo           |
+| End-Effector | Gripping / Tool | Rotational / Grasp | Servo / Pneumatic |
 
-  ```css title="src/styles/global.css" caption="Styling code blocks using rehype-pretty-code (with a caption down here)" showLineNumbers{80} {10-12} /apply/ /components/
-  @layer components {
-    article {
-      @apply prose-headings:scroll-mt-20;
+---
 
-      .katex-display {
-        @apply overflow-x-auto overflow-y-hidden;
-      }
+## **3. Kinematics**
+Kinematics deals with the movement of the robotic arm **without considering forces**. We analyze:
+- **Forward Kinematics (FK):** Finding the end-effector position from joint angles.
+- **Inverse Kinematics (IK):** Computing required joint angles for a target position.
 
-      /* Removes background from <mark> elements */
-      mark {
-        @apply bg-transparent;
-      }
+### **3.1 Forward Kinematics (FK)**
+FK is calculated using **Denavit-Hartenberg (DH) parameters**, which define joint transformations in matrix form.
 
-      /* Blanket syntax highlighting */
-      code[data-theme*=' '] {
-        span { /* [!code ++] */
-          color: var(--shiki-light); /* [!code ++] */
-        } /* [!code ++] */
+$$
+T_{i}^{i-1} = \begin{bmatrix}
+\cos\theta_i & -\sin\theta_i\cos\alpha_i & \sin\theta_i\sin\alpha_i & a_i\cos\theta_i \\
+\sin\theta_i & \cos\theta_i\cos\alpha_i & -\cos\theta_i\sin\alpha_i & a_i\sin\theta_i \\
+0 & \sin\alpha_i & \cos\alpha_i & d_i \\
+0 & 0 & 0 & 1
+\end{bmatrix}
+$$
 
-        .dark & span { /* [!code --] */
-          color: var(--shiki-dark); /* [!code --] */
-        } /* [!code --] */
-      }
-  ```
+Where:
+- $ \theta_i $ = Joint angle
+- $ \alpha_i $ = Link twist
+- $ a_i $ = Link length
+- $ d_i $ = Link offset
 
-  When I added those two diff additions and deletions, I simply added `/* [!code ++] */` and `/* [!code --] */` to the lines I wanted to highlight. Just use the comment syntax of whatever language you're attempting to highlight.
+FK helps us determine the final position $(X, Y, Z)$ based on **joint rotations**.
 
-- The `cn(){:ts}` function is a utility function which combines [clsx](https://www.npmjs.com/package/clsx) and [tailwind-merge](https://www.npmjs.com/package/tailwind-merge), two packages which allow painless conditional class addition and concatenation:
+### **3.2 Inverse Kinematics (IK)**
+IK solves for **joint angles** given a desired end-effector position. It can be solved using:
+- **Geometric Method** (for simple cases)
+- **Jacobian Matrix & Pseudoinverse** (for complex arms)
+- **Numerical Optimization (Gradient Descent, Newton-Raphson)**
 
-  ```tsx title="src/lib/utils.ts" caption="A utility function for class name concatenation" showLineNumbers
-  import { type ClassValue, clsx } from 'clsx'
-  import { twMerge } from 'tailwind-merge'
+#### **IK Calculation Example for a 2-DOF Arm**
+```python
+import numpy as np
 
-  export function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs))
-  }
-  ```
+def inverse_kinematics(x, y, l1, l2):
+    D = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+    
+    if abs(D) > 1:
+        raise ValueError("Target is out of reach")
+    
+    theta2 = np.arctan2(np.sqrt(1 - D**2), D)  # Elbow angle
+    theta1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(theta2), l1 + l2 * np.cos(theta2))
+    
+    return np.degrees(theta1), np.degrees(theta2)
 
-  This needs to be in every single template. This is an example of it being used in my `<Link>{:tsx}` component:
+# Example: Target (x=10, y=10), arm lengths l1=10, l2=10
+theta1, theta2 = inverse_kinematics(10, 10, 10, 10)
+print(f"Joint Angles: θ1={theta1:.2f}, θ2={theta2:.2f}")
 
-  ```astro showLineNumbers title="src/components/Link.astro" caption="A custom Link component with tailwind-merge and clsx" {16-20}
-  ---
-  import { cn } from '@/lib/utils'
+---
 
-  const { href, external, class: className, underline, ...rest } = Astro.props
-  ---
+## **4. Control System**
 
-  <a
-    href={href}
-    target={external ? '_blank' : '_self'}
-    class={cn(
-      'inline-block transition-colors duration-300 ease-in-out',
-      underline &&
-        'underline decoration-muted-foreground underline-offset-[3px] hover:decoration-foreground',
-      className,
-    )}
-    {...rest}
-  >
-    <slot />
-  </a>
-  ```
+### **4.1 Open-Loop Control (Basic Servo Control)**
+A simple method where predefined angles are sent without feedback.
 
-  We were able to, in a single helper function:
+```cpp
+#include <Servo.h>
+Servo servo1;
 
-  1. Concatenate whatever the user passed via the `class` prop to our base styles
-  2. Conditionally add an underline if the `underline` prop is true
+void setup() {
+    servo1.attach(9);
+}
 
-  Awesome!
+void loop() {
+    servo1.write(90); // Move to 90 degrees
+    delay(1000);
+}
+```
 
-## Welcoming some UX features
+### **4.2 Closed-Loop Control (PID Feedback)**
+Uses **encoders + PID Controllers** for precise movement correction.
 
-Within the blog itself (as in the layout, appearance, and navigation) are features that I believe are essential for a great user experience:
+```python
+import time
+import PID
 
-- Images are awesome and, by default, your blog post should have an image associated with it as part of the post's [Open Graph](https://ogp.me/) metadata. Since you can do whatever you want with the image, all of my dummy posts will have a placeholder image placed within their folder in `src/content/blog/`. Whenever you load into a blog post, splat in the middle will be the image associated with that post in its frontmatter.
-- Theme selectors should be self-explanatory. I've added one on the top right of the header, which is also `sticky` and not `absolute` such that it doesn't ignore the document flow (and thus you won't have to add `mt-20` to the top of every single page).
-- The table of contents of a post shouldn't be reduced to a `<details closed>{:html}` at the start of a blog post on desktop. You'd need to go to the top of the page to navigate through items. I've added a sticky `TableOfContents` component which always hangs out around the unused left side margin of a blog post. I also attached a very tiny client-side script using [`IntersectionObserver{:ts}`](https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver) to highlight all of the headings you're viewing within the TOC as you scroll through the page&mdash;it also will handle nested headings in that the parent heading of a visible child will still be highlighted even if off-screen (see the dummy [2024 Post](/blog/2024-post) for an example of this). I'll still use a collapsible `<details>{:html}` element for the table of contents on mobile though since obviously a table of contents on the side is unfeasible for small screens.
-- Every page, except the homepage, will have a `<Breadcrumb>{:tsx}` component which shows you your current location in the site hierarchy. I don't see these often in blog templates even though they are so amazing for both discoverability (SEO and crawling) and user experience (the user always knows how "deep" they are in the site).
-- You can specify multiple post authors via frontmatter. If this post author's id is found within the `Authors` collection, then it will render particular info from that author's frontmatter file, `[author-name].md` (e.g. avatar, link to profile). For example, the previous post (2024 Post) has two authors: "enscribe" and "jktrn", where "enscribe" is the only author with a custom avatar since "jktrn" is unregistered.
-  - Each author will have their own page, which lists all of their posts. If you're the only author throughout the entire blog then you can simply disregard all aspects regarding both inserting authors and the `Authors` collection.
-- Each tag will also have their own page, which lists all of the posts under that tag!
-- $\LaTeX$ is fully supported with [KaTeX](https://katex.org/):
+pid = PID.PID(1.2, 0.01, 0.2)
+pid.SetPoint = 90  # Desired angle
 
-  <blockquote>
+while True:
+    feedback = get_encoder_angle()
+    output = pid.update(feedback)
+    motor_control(output)
+    time.sleep(0.1)
+```
 
-  To solve the cubic equation $t^3 + pt + q = 0$ (where the real numbers
-  $p, q$ satisfy ${4p^3 + 27q^2} > 0$) one can use Cardano's formula:
+**Advantages of Closed-Loop Control:**
+- **More precise positioning**
+- **Error correction using sensors**
+- **Adaptive learning with AI integration**
 
-  $$
-    \sqrt[{3}]{
-      -\frac{q}{2}
-      +\sqrt{\frac{q^2}{4} + {\frac{p^{3}}{27}}}
-    }+
-    \sqrt[{3}]{
-      -\frac{q}{2}
-      -\sqrt{\frac{q^2}{4} + {\frac{p^{3}}{27}}}
-    }
-  $$
+---
 
-  For any $u_1, \dots, u_n \in \mathbb{C}$ and
-  $v_1, \dots, v_n \in \mathbb{C}$, the Cauchy–Bunyakovsky–Schwarz
-  inequality can be written as follows:
+### **4.3 PID Control: The Brain of Precision Movement**
+A **PID (Proportional-Integral-Derivative) Controller** is an algorithm used in control systems to maintain a system at a desired state by continuously adjusting inputs based on feedback. It’s widely used in robotics, industrial automation, and aerospace applications.
 
-  $$
-    \left| \sum_{k=1}^n {u_k \bar{v_k}} \right|^2
-    \leq
-    {
-      \left( \sum_{k=1}^n {|u_k|} \right)^2
-      \left( \sum_{k=1}^n {|v_k|} \right)^2
-    }
-  $$
+#### **4.3.1 What is PID Control?**
+PID stands for:
+- **Proportional (P):** Reacts to the current error.
+- **Integral (I):** Reacts to the accumulated error over time.
+- **Derivative (D):** Reacts to the rate of change of error.
 
-  Finally, the determinant of a Vandermonde matrix can be calculated
-  using the following expression:
+It continuously calculates an **error value** \( e(t) \), which is the difference between the **desired setpoint** and the **actual measured value**. The PID controller then adjusts the system’s output to **minimize this error**.
 
-  $$
-    \begin{vmatrix}
-    1 & x_1 & x_1^2 & \dots & x_1^{n-1} \\
-    1 & x_2 & x_2^2 & \dots & x_2^{n-1} \\
-    1 & x_3 & x_3^2 & \dots & x_3^{n-1} \\
-    \vdots & \vdots & \vdots & \ddots & \vdots \\
-    1 & x_n & x_n^2 & \dots & x_n^{n-1} \\
-    \end{vmatrix}
-    = {\prod_{1 \leq {i,j} \leq n} {(x_i - x_j)}}
-  $$
+---
 
-  —<cite>[Three famous mathematical formulas](https://developer.mozilla.org/en-US/docs/Learn/MathML/First_steps/Three_famous_mathematical_formulas) (Mozilla Docs)</cite>
+#### **4.3.2 The PID Equation**
+The control output \( u(t) \) is given by:
+$$
+u(t) = K_p e(t) + K_i \int e(t) dt + K_d \frac{d}{dt} e(t)
+$$
 
-  </blockquote>
+Where:
+- \( e(t) \) = Setpoint – Actual Value (Error)
+- \( K_p \) = Proportional Gain
+- \( K_i \) = Integral Gain
+- \( K_d \) = Derivative Gain
 
-## Foregoing some slop
+Each term has a specific role:
 
-- Goodbye, [ESLint](https://eslint.org/)! There have been so many occasions where I've had to deal with blogging templates with in-built pre-commit hooks which enforce contrived and arbitrary linting rules that, frankly, I couldn't be bothered with. Obviously, linting is awesome for ensuring consistency and best practice, but that's with shared and large codebases. You're dealing with, at most, your mediocre MDX blog posts and some interior fetching. It's just not worth the hypertension.
+| Term          | Function  |
+|--------------|--------------------------------------------------|
+| **Proportional (P)** | Reacts to current error. Larger error → Larger correction. |
+| **Integral (I)**     | Accumulates past errors. Helps remove steady-state errors. |
+| **Derivative (D)**   | Predicts future errors based on rate of change. Reduces overshoot. |
 
-- You really don't need analytics via [Umami](https://umami.is) or [Plausible](https://plausible.io). Let's be realistic: for many personal blogs, unless you're an anime profile picture Twitter microcelebrity and/or the daughter of Taylor Swift you don't need to know how many of your avid fans click Big Button A versus how many click Big Button B.
-- You really don't need a comments section via [Giscus](https://giscus.app). This opens up a can of worms involving the ability to spam comments and the necessity to moderate them. If you want organic discussion about your blog posts to happen, then share on social media and let people discuss there.
-  - Speaking of sharing on social media, let's get rid of the share buttons. Please inform me of a single time you have used a share button on a blog post.
-- You really don't need a <abbr title="Content Management System">CMS</abbr> unless you have thousands of posts and/or are willing to navigate through a clunky management interface. Markdown and folders is really all you need, which you can organize to your preference via folder or file naming conventions.
-- If you have literally anything involving an `.env` file in a blogging site, please think about what you are doing very carefully.
-- Please do not override the browser's <kbd>Ctrl</kbd> + <kbd>K</kbd> functionality to open up a command palette. There should not be a single reason why a user would use a small context menu to browse your blog over the `/blog` route. Most of the time, command palettes on sites do nothing more than regurgitate shortcuts that are already on the same page you're hiding with the palette's modal.
+---
 
-## Something important
+#### **4.3.3 Understanding Each Term**
 
-Before we wrap up, I want to emphasize that everything that I've shared here is based on my own personal opinions and experiences. While I believe these practices and choices lead to a better blogging experience, you're absolutely free to disagree.
+##### **(a) Proportional Control (P)**
+- Adjusts the output proportional to the error.
+- If error is large, correction is strong; if error is small, correction is weak.
+- However, **P alone cannot eliminate steady-state error**.
 
-The web development community, especially in spaces like Twitter and various online forums, is constantly engaged in heated debates about what constitutes "best practices." You'll find a wide spectrum of viewpoints:
+\[
+u(t) = K_p e(t)
+\]
 
-1. Fundamentalists who adhere strictly to established patterns and completely disregard change,
-2. Accelerationists who gobble up whatever Vercel cooks as if it's the second coming of Christ,
-3. and everyone in between this spectrum who just wants to ship.
+🔹 **Example:** If a robotic arm is 10° away from the target, **P control applies a force proportional to 10°**. If it's 1° away, the force is 10x smaller.
 
-I'm just another guy who loves to blog, and I wanted to share what particular technology stack worked the best for me in this particular use case. A stack for one project can be completely unusable for another. If you vehemently hate any of the design choices I've made then simply get rid of them. MIT license! Happy blogging.
+---
+
+##### **(b) Integral Control (I)**
+- Accumulates past errors and applies corrections.
+- Helps eliminate steady-state errors.
+- However, too much I can cause overshoot.
+
+\[
+u(t) = K_i \int e(t) dt
+\]
+
+🔹 **Example:** If a robotic arm consistently stops slightly short of the target, the **integral term accumulates the small errors and compensates**.
+
+---
+
+##### **(c) Derivative Control (D)**
+- Predicts future error trends by analyzing the rate of change.
+- Reduces overshoot and improves stability.
+- However, too much D can amplify noise.
+
+$$
+u(t) = K_p e(t) + K_i \int e(t) dt + K_d \frac{d}{dt} e(t)
+$$
+🔹 **Example:** If the robotic arm moves too fast toward the target, the **derivative term slows it down, preventing overshoot**.
+
+---
+
+#### **4.3.4 PID Tuning (Choosing \( K_p \), \( K_i \), \( K_d \))**
+Tuning PID means finding the best \( K_p \), \( K_i \), \( K_d \) values for a system. Common tuning methods:
+
+- **Manual Tuning:** Trial and error.
+- **Ziegler-Nichols Method:** Uses system response.
+- **Auto-Tuning Algorithms:** AI-based optimization.
+
+A well-tuned PID controller ensures:
+- **Fast response**
+- **Minimal overshoot**
+- **Accurate positioning**
+
+
+
+## **5. Potential Upgrades**
+- **Computer Vision (OpenCV + YOLO)** – Object tracking.
+- **ROS Integration** – Advanced motion planning.
+- **Haptic Feedback** – Real-time force sensing.
+- **AI-powered Motion Prediction** – Adaptive learning.
+- **Wireless Control (ESP-NOW / BLE)** – Remote operation.
+
+---
+
+## **6. Conclusion**
+This robotic arm project demonstrates a comprehensive understanding of **mechanical assembly, kinematics, and control algorithms**. Future developments will focus on **AI integration, real-time feedback, and enhanced autonomy** for industrial and research applications.
+
+## **Robotic Arm 3D Model**
+ i will provide that soon
+
+
