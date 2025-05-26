@@ -1,0 +1,85 @@
+---
+title: 'Joystick-Based Kaleidoscope LED: ADHD Fidget Light Project'
+description: 'A simple and mesmerizing LED setup powered by a joystick, designed to provide sensory feedback and serve as a subtle fidgeting aid.'
+date: 2025-05-26
+tags: ['adhd', 'arduino', 'joystick', 'ws2812b', 'led', 'diy', 'projects']
+image: './figdet cover.png'
+---
+
+> _"When your brain’s multitasking, let your fingers do the dancing."_  
+> — Me, soldering this thing at 2AM.
+
+---
+
+## 🌈 Why Build a Joystick Kaleidoscope?
+
+As someone with ADHD, I often crave **non-disruptive sensory feedback**—something to channel micro-movements without killing focus. This little DIY kaleidoscope does exactly that: It lets you tilt, nudge, or spin a joystick to create beautiful shifting LED colors, like a mood ring that vibes with your thumb.
+
+It’s not about posture correction (yet), but more about **focus stimulation** through tactile and visual feedback. Bonus: It’s addictive.
+
+---
+
+## 🧩 Components Used
+
+| Component        | Description                                      |
+|------------------|--------------------------------------------------|
+| Joystick Module  | Analog stick with X and Y axes                   |
+| Arduino Nano     | The tiny brain running the light show            |
+| WS2812B LEDs     | Individually addressable RGB LEDs (x3)           |
+| Li-ion Battery   | Rechargeable power, portable, perfect for ADHD   |
+| Switch + Enclosure | Cardboard + velcro = chaos box aesthetic       |
+
+---
+
+## 🔧 How It Works
+
+The joystick outputs **analog voltage** values for X and Y positions. These are read by the Arduino, and each axis is **mapped to a color channel** (Red and Green). The **Blue** channel randomly updates when the joystick is moved off-center, creating a cool, shifting **kaleidoscope** effect.
+
+The colors change smoothly, reacting to tiny movements—like a visual fidget spinner but smarter.
+
+---
+
+## 💡 Code Breakdown
+
+```cpp
+#include <Adafruit_NeoPixel.h>
+
+#define JOY_X A0
+#define JOY_Y A1
+#define LED_PIN 6
+#define NUM_LEDS 3
+
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+uint8_t blue = 0;
+unsigned long lastZUpdate = 0;
+const unsigned long zInterval = 150;
+
+void setup() {
+  strip.begin();
+  strip.setBrightness(30);  
+  strip.show();
+  randomSeed(analogRead(A2)); 
+}
+
+void loop() {
+  int xVal = analogRead(JOY_X); 
+  int yVal = analogRead(JOY_Y); 
+
+  uint8_t red   = map(xVal, 0, 1023, 0, 255);
+  uint8_t green = map(yVal, 0, 1023, 0, 255);
+
+  if (abs(xVal - 512) > 10 || abs(yVal - 512) > 10) {
+    if (millis() - lastZUpdate > zInterval) {
+      blue = random(0, 256);
+      lastZUpdate = millis();
+    }
+  }
+
+  for (int i = 0; i < 4; i++) {
+    strip.setPixelColor(i, strip.Color(red, green, blue));
+  }
+
+  strip.show();
+  delay(20);  
+}
